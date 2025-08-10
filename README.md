@@ -30,21 +30,13 @@ Basically a 3D version of place made in JS. Still a lot of work to do but it's a
 
 Potential features for future versions:
 - **Multiplayer Support**: Real-time collaboration with other users
-- **3D Layers**: Ability to place cubes at different heights
-- **Custom Colors**: Color picker for unlimited color options
-- **Undo/Redo**: History management for actions
+- **RGB Colors**: Color picker for unlimited color options
 - **Export Options**: 3D model export (OBJ, STL)
-- **Presets**: Pre-built patterns and templates
-- **Mobile Touch**: Optimized touch controls for mobile devices
+- **Mobile**: Touch controls for mobile devices
 
 ## Contributing
 
-Feel free to fork this project and add your own features! Some areas for contribution:
-- Additional tools and brushes
-- Less janky camera controls
-- Multiplayer
-- New color palettes
-- Mobile
+Feel free to fork this project and add your own features!
 
 ## License
 
