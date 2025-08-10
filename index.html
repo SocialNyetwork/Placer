@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Place3D</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/PointerLockControls.js"></script>
+</head>
+<body>
+    <div id="app">
+        <header class="header">
+            <h1>Place3D</h1>
+            <p>Click to place cubes!</p>
+        </header>
+        
+        <div class="controls">
+            <div class="color-palette">
+                <h3>Colors</h3>
+                <div class="color-grid">
+                    <div class="color-option" data-color="#ff0000" style="background-color: #ff0000;"></div>
+                    <div class="color-option" data-color="#00ff00" style="background-color: #00ff00;"></div>
+                    <div class="color-option" data-color="#0000ff" style="background-color: #0000ff;"></div>
+                    <div class="color-option" data-color="#ffff00" style="background-color: #ffff00;"></div>
+                    <div class="color-option" data-color="#ff00ff" style="background-color: #ff00ff;"></div>
+                    <div class="color-option" data-color="#00ffff" style="background-color: #00ffff;"></div>
+                    <div class="color-option" data-color="#ff8800" style="background-color: #ff8800;"></div>
+                    <div class="color-option" data-color="#8800ff" style="background-color: #8800ff;"></div>
+                    <div class="color-option" data-color="#ffffff" style="background-color: #ffffff;"></div>
+                    <div class="color-option" data-color="#000000" style="background-color: #000000;"></div>
+                    <div class="color-option" data-color="#888888" style="background-color: #888888;"></div>
+                    <div class="color-option" data-color="#ff0088" style="background-color: #ff0088;"></div>
+                </div>
+            </div>
+            
+            <div class="tools">
+                <h3>Tools</h3>
+                <button id="clear-btn" class="btn">Clear Canvas</button>
+                <button id="save-btn" class="btn">Save Image</button>
+                <button id="reset-camera-btn" class="btn">Reset Camera</button>
+            </div>
+            
+            <div class="info">
+                <h3>Instructions</h3>
+                <ul>
+                    <li>Click to enter first-person mode</li>
+                    <li>WASD or Arrow keys to move</li>
+                    <li>Shift to move up, Space to move down</li>
+                    <li>Mouse to look around</li>
+                    <li>Left click to place cubes</li>
+                    <li>Right click to remove cubes</li>
+                    <li>Scroll wheel to cycle colors</li>
+                    <li>Cubes stack on top of each other</li>
+                    <li>ESC to exit first-person mode</li>
+                    <li>Select a color from the palette</li>
+                </ul>
+            </div>
+        </div>
+        
+        <div id="canvas-container">
+            <canvas id="canvas"></canvas>
+            <div id="crosshair" class="crosshair">+</div>
+        </div>
+        
+        <div class="stats">
+            <span id="cube-count">Cubes placed: 0</span>
+            <span id="current-color">Selected: Red</span>
+        </div>
+    </div>
+    
+    <script src="script.js"></script>
+</body>
+</html>
