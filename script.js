@@ -14,14 +14,34 @@ class Place3D {
         this.maxHeight = 20; // Maximum height for stacking
         this.previewCube = null; // Preview cube outline
         this.isFirstPerson = true; // First person mode
-        this.isPointerLocked = false; // Track pointer lock state
+        this.isPointerLocked = false;
+        this.isDestructionMode = false;
+        this.highlightedCube = null;
+        this.highlightOutline = null;
+        this.lastMouseX = 0;
+        this.lastMouseY = 0;
         
         // Color cycling
         this.colors = [
-            '#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff', '#00ffff',
-            '#ff8800', '#8800ff', '#ffffff', '#000000', '#888888', '#ff0088'
+            '#f2ffe8', // Light mint green
+            '#c2bfc8', // Light grey
+            '#a8d3e1', // Light blue
+            '#acce71', // Lime green
+            '#eeca6f', // Golden yellow
+            '#ef9e6d', // Peach orange
+            '#dea999', // Light terracotta
+            '#ee9489', // Coral pink
+            '#dea9d2', // Light lavender
+            '#83758b', // Muted purple
+            '#6f8be6', // Periwinkle blue
+            '#498f94', // Teal
+            '#8c6a61', // Brown
+            '#986075', // Mauve
+            '#7767a6', // Purple
+            '#322f3d'  // Dark grey
         ];
         this.currentColorIndex = 0;
+        this.selectedColor = this.colors[0]; // Light Mint Green
         
         this.init();
         this.setupEventListeners();
@@ -124,6 +144,18 @@ class Place3D {
         this.previewCube.visible = false;
         this.previewCube.renderOrder = 999; // Render on top
         this.scene.add(this.previewCube);
+        
+        // Create highlight outline for destruction mode
+        const highlightGeometry = new THREE.BoxGeometry(this.cubeSize, this.cubeSize, this.cubeSize);
+        const highlightMaterial = new THREE.MeshBasicMaterial({
+            color: 0xffffff,
+            transparent: true,
+            opacity: 0.6,
+            wireframe: true
+        });
+        this.highlightOutline = new THREE.Mesh(highlightGeometry, highlightMaterial);
+        this.highlightOutline.visible = false;
+        this.scene.add(this.highlightOutline);
     }
     
     setupGrid() {
@@ -153,7 +185,14 @@ class Place3D {
         this.renderer.domElement.addEventListener('click', (event) => {
             // If pointer is locked, place cube; otherwise, try to lock
             if (this.controls.isLocked) {
-                this.onMouseClick(event);
+                if (this.isDestructionMode && this.highlightedCube) {
+                    // Destroy the highlighted cube
+                    this.destroyCube(this.highlightedCube);
+                    this.highlightedCube = null;
+                    this.highlightOutline.visible = false;
+                } else {
+                    this.onMouseClick(event);
+                }
             } else {
                 this.hidePromptOverlay();
                 // Ensure canvas is focused before attempting to lock
@@ -166,11 +205,28 @@ class Place3D {
         this.renderer.domElement.tabIndex = 0;
         this.renderer.domElement.style.outline = 'none';
         
+        // Right click for destruction mode
+        this.renderer.domElement.addEventListener('mousedown', (event) => {
+            if (event.button === 2 && this.controls.isLocked) { // Right mouse button
+                event.preventDefault();
+                this.isDestructionMode = true;
+                this.previewCube.visible = false;
+            }
+        });
+        
+        this.renderer.domElement.addEventListener('mouseup', (event) => {
+            if (event.button === 2) { // Right mouse button
+                event.preventDefault();
+                this.isDestructionMode = false;
+                this.highlightOutline.visible = false;
+                this.highlightedCube = null;
+                this.previewCube.visible = true;
+            }
+        });
+        
+        // Prevent context menu on right click
         this.renderer.domElement.addEventListener('contextmenu', (event) => {
             event.preventDefault();
-            if (this.controls.isLocked) {
-                this.onRightClick(event);
-            }
         });
         
         // Mouse move for preview
@@ -242,70 +298,99 @@ class Place3D {
         });
         
         // Set initial color
-        this.selectColor('#ff0000');
+        this.selectColor(this.colors[0]);
     }
     
     onMouseMove(event) {
-        // Calculate mouse position in normalized device coordinates
-        this.mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-        this.mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+        if (!this.controls.isLocked) return;
         
-        // Update the picking ray with the camera and mouse position
-        this.raycaster.setFromCamera(this.mouse, this.camera);
+        // Track mouse position
+        this.lastMouseX = event.clientX;
+        this.lastMouseY = event.clientY;
         
-        // First, check for intersections with existing cubes
-        const cubeIntersects = this.raycaster.intersectObjects(Array.from(this.cubes.values()));
+        const mouse = new THREE.Vector2();
+        mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+        mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
         
-        if (cubeIntersects.length > 0) {
-            // Place on side of existing cube
-            const intersect = cubeIntersects[0];
-            const face = intersect.face;
-            const cube = intersect.object;
+        this.raycaster.setFromCamera(mouse, this.camera);
+        
+        if (this.isDestructionMode) {
+            // In destruction mode, highlight existing cubes
+            const intersects = this.raycaster.intersectObjects(Array.from(this.cubes.values()));
             
-            // Get the cube's position
-            const cubePos = cube.position;
-            
-            // Determine which face was hit and calculate placement position
-            const placementPos = this.calculateSidePlacement(cubePos, face);
-            
-            if (placementPos && this.isValidPlacement(placementPos.x, placementPos.y, placementPos.z)) {
-                this.previewCube.position.set(placementPos.x, placementPos.y, placementPos.z);
-                this.previewCube.material.color.setHex(this.selectedColor.replace('#', '0x'));
-                this.previewCube.visible = true;
+            if (intersects.length > 0) {
+                const closestCube = intersects[0].object;
+                if (closestCube !== this.highlightedCube) {
+                    this.highlightedCube = closestCube;
+                    this.highlightOutline.position.copy(closestCube.position);
+                    this.highlightOutline.visible = true;
+                }
             } else {
-                this.previewCube.visible = false;
+                this.highlightedCube = null;
+                this.highlightOutline.visible = false;
             }
         } else {
-            // Fall back to ground plane intersection
-            const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
-            const intersectionPoint = new THREE.Vector3();
+            // Normal placement mode
+            const cubeIntersects = this.raycaster.intersectObjects(Array.from(this.cubes.values()));
             
-            this.raycaster.ray.intersectPlane(groundPlane, intersectionPoint);
-            
-            if (intersectionPoint) {
-                // Snap to grid - place in center of grid squares
-                const x = Math.floor(intersectionPoint.x / this.cubeSize) * this.cubeSize + this.cubeSize / 2;
-                const z = Math.floor(intersectionPoint.z / this.cubeSize) * this.cubeSize + this.cubeSize / 2;
+            if (cubeIntersects.length > 0) {
+                // Place on side of existing cube
+                const intersect = cubeIntersects[0];
+                const face = intersect.face;
+                const cube = intersect.object;
                 
-                // Check if the snapped position is within grid bounds
-                const halfGrid = this.gridSize / 2;
-                if (x >= -halfGrid && x <= halfGrid && z >= -halfGrid && z <= halfGrid) {
-                    // Find the highest cube at this x,z position
-                    const y = this.findHighestCubeAt(x, z);
+                // Get the cube's position
+                const cubePos = cube.position;
+                
+                // Determine which face was hit and calculate placement position
+                const placementPos = this.calculateSidePlacement(cubePos, face);
+                
+                if (placementPos && this.isValidPlacement(placementPos.x, placementPos.y, placementPos.z)) {
+                    this.previewCube.position.set(placementPos.x, placementPos.y, placementPos.z);
+                    this.previewCube.material.color.setHex(this.selectedColor.replace('#', '0x'));
+                    this.previewCube.visible = true;
+                } else {
+                    this.previewCube.visible = false;
+                }
+            } else {
+                // Fall back to ground plane intersection
+                const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+                const intersectionPoint = new THREE.Vector3();
+                
+                this.raycaster.ray.intersectPlane(groundPlane, intersectionPoint);
+                
+                if (intersectionPoint) {
+                    // Snap to grid - place in center of grid squares
+                    const x = Math.floor(intersectionPoint.x / this.cubeSize) * this.cubeSize + this.cubeSize / 2;
+                    const z = Math.floor(intersectionPoint.z / this.cubeSize) * this.cubeSize + this.cubeSize / 2;
                     
-                    if (y < this.maxHeight) {
-                        this.previewCube.position.set(x, y, z);
-                        this.previewCube.material.color.setHex(this.selectedColor.replace('#', '0x'));
-                        this.previewCube.visible = true;
+                    // Check if the snapped position is within grid bounds
+                    const halfGrid = this.gridSize / 2;
+                    if (x >= -halfGrid && x <= halfGrid && z >= -halfGrid && z <= halfGrid) {
+                        // Find the highest cube at this x,z position
+                        const y = this.findHighestCubeAt(x, z);
+                        
+                        if (y < this.maxHeight) {
+                            this.previewCube.position.set(x, y, z);
+                            this.previewCube.material.color.setHex(this.selectedColor.replace('#', '0x'));
+                            this.previewCube.visible = true;
+                        } else {
+                            this.previewCube.visible = false;
+                        }
                     } else {
                         this.previewCube.visible = false;
                     }
                 } else {
                     this.previewCube.visible = false;
                 }
-            } else {
-                this.previewCube.visible = false;
             }
+        }
+        // Animate highlight outline pulsing
+        if (this.highlightOutline && this.highlightOutline.visible) {
+            const time = Date.now() * 0.003;
+            const pulse = 0.5 + 0.3 * Math.sin(time * 4);
+            this.highlightOutline.material.opacity = 0.3 + 0.4 * pulse;
+            this.highlightOutline.scale.setScalar(1 + 0.05 * pulse);
         }
     }
     
@@ -362,28 +447,7 @@ class Place3D {
         }
     }
     
-    onRightClick(event) {
-        // Calculate mouse position in normalized device coordinates
-        this.mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-        this.mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
-        
-        // Update the picking ray with the camera and mouse position
-        this.raycaster.setFromCamera(this.mouse, this.camera);
-        
-        // Check for intersections with existing cubes
-        const intersects = this.raycaster.intersectObjects(Array.from(this.cubes.values()));
-        
-        if (intersects.length > 0) {
-            const intersectedCube = intersects[0].object;
-            
-            // Find the cube in our map and remove it
-            this.cubes.forEach((cube, key) => {
-                if (cube === intersectedCube) {
-                    this.removeCubeByKey(key);
-                }
-            });
-        }
-    }
+
     
     onWheel(event) {
         event.preventDefault();
@@ -480,7 +544,7 @@ class Place3D {
         if (cube) {
             this.scene.remove(cube);
             this.cubes.delete(key);
-            this.cubeCount--;
+            this.cubeCount = Math.max(0, this.cubeCount - 1);
             this.updateStats();
             
             // Update preview cube position after removing
@@ -536,18 +600,22 @@ class Place3D {
         
         // Update stats
         const colorNames = {
-            '#ff0000': 'Red',
-            '#00ff00': 'Green',
-            '#0000ff': 'Blue',
-            '#ffff00': 'Yellow',
-            '#ff00ff': 'Magenta',
-            '#00ffff': 'Cyan',
-            '#ff8800': 'Orange',
-            '#8800ff': 'Purple',
-            '#ffffff': 'White',
-            '#000000': 'Black',
-            '#888888': 'Gray',
-            '#ff0088': 'Pink'
+            '#f2ffe8': 'Light Mint Green',
+            '#c2bfc8': 'Light Grey',
+            '#a8d3e1': 'Light Blue',
+            '#acce71': 'Lime Green',
+            '#eeca6f': 'Golden Yellow',
+            '#ef9e6d': 'Peach Orange',
+            '#dea999': 'Light Terracotta',
+            '#ee9489': 'Coral Pink',
+            '#dea9d2': 'Light Lavender',
+            '#83758b': 'Muted Purple',
+            '#6f8be6': 'Periwinkle Blue',
+            '#498f94': 'Teal',
+            '#8c6a61': 'Brown',
+            '#986075': 'Mauve',
+            '#7767a6': 'Purple',
+            '#322f3d': 'Dark Grey'
         };
         
         document.getElementById('current-color').textContent = `Selected: ${colorNames[color] || color}`;
@@ -771,60 +839,91 @@ class Place3D {
     }
     
     updatePreviewCube() {
-        // Update preview cube position based on current mouse position
-        if (this.mouse && this.raycaster) {
-            this.raycaster.setFromCamera(this.mouse, this.camera);
+        // Get current mouse position
+        const mouse = new THREE.Vector2();
+        mouse.x = (this.lastMouseX / window.innerWidth) * 2 - 1;
+        mouse.y = -(this.lastMouseY / window.innerHeight) * 2 + 1;
+        
+        this.raycaster.setFromCamera(mouse, this.camera);
+        
+        // First, check for intersections with existing cubes
+        const cubeIntersects = this.raycaster.intersectObjects(Array.from(this.cubes.values()));
+        
+        if (cubeIntersects.length > 0) {
+            // Place on side of existing cube
+            const intersect = cubeIntersects[0];
+            const face = intersect.face;
+            const cube = intersect.object;
             
-            // First, check for intersections with existing cubes
-            const cubeIntersects = this.raycaster.intersectObjects(Array.from(this.cubes.values()));
+            // Get the cube's position
+            const cubePos = cube.position;
             
-            if (cubeIntersects.length > 0) {
-                // Place on side of existing cube
-                const intersect = cubeIntersects[0];
-                const face = intersect.face;
-                const cube = intersect.object;
-                
-                // Get the cube's position
-                const cubePos = cube.position;
-                
-                // Determine which face was hit and calculate placement position
-                const placementPos = this.calculateSidePlacement(cubePos, face);
-                
-                if (placementPos && this.isValidPlacement(placementPos.x, placementPos.y, placementPos.z)) {
-                    this.previewCube.position.set(placementPos.x, placementPos.y, placementPos.z);
-                    this.previewCube.visible = true;
-                } else {
-                    this.previewCube.visible = false;
-                }
+            // Determine which face was hit and calculate placement position
+            const placementPos = this.calculateSidePlacement(cubePos, face);
+            
+            if (placementPos && this.isValidPlacement(placementPos.x, placementPos.y, placementPos.z)) {
+                this.previewCube.position.set(placementPos.x, placementPos.y, placementPos.z);
+                this.previewCube.visible = true;
             } else {
-                // Fall back to ground plane intersection
-                const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
-                const intersectionPoint = new THREE.Vector3();
+                this.previewCube.visible = false;
+            }
+        } else {
+            // Fall back to ground plane intersection
+            const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+            const intersectionPoint = new THREE.Vector3();
+            
+            this.raycaster.ray.intersectPlane(groundPlane, intersectionPoint);
+            
+            if (intersectionPoint) {
+                const x = Math.floor(intersectionPoint.x / this.cubeSize) * this.cubeSize + this.cubeSize / 2;
+                const z = Math.floor(intersectionPoint.z / this.cubeSize) * this.cubeSize + this.cubeSize / 2;
                 
-                this.raycaster.ray.intersectPlane(groundPlane, intersectionPoint);
-                
-                if (intersectionPoint) {
-                    const x = Math.floor(intersectionPoint.x / this.cubeSize) * this.cubeSize + this.cubeSize / 2;
-                    const z = Math.floor(intersectionPoint.z / this.cubeSize) * this.cubeSize + this.cubeSize / 2;
+                // Check if the snapped position is within grid bounds
+                const halfGrid = this.gridSize / 2;
+                if (x >= -halfGrid && x <= halfGrid && z >= -halfGrid && z <= halfGrid) {
+                    const y = this.findHighestCubeAt(x, z);
                     
-                    // Check if the snapped position is within grid bounds
-                    const halfGrid = this.gridSize / 2;
-                    if (x >= -halfGrid && x <= halfGrid && z >= -halfGrid && z <= halfGrid) {
-                        const y = this.findHighestCubeAt(x, z);
-                        
-                        if (y < this.maxHeight) {
-                            this.previewCube.position.set(x, y, z);
-                            this.previewCube.visible = true;
-                        } else {
-                            this.previewCube.visible = false;
-                        }
+                    if (y < this.maxHeight) {
+                        this.previewCube.position.set(x, y, z);
+                        this.previewCube.visible = true;
                     } else {
                         this.previewCube.visible = false;
                     }
                 } else {
                     this.previewCube.visible = false;
                 }
+            } else {
+                this.previewCube.visible = false;
             }
+        }
+    }
+
+    destroyCube(cube) {
+        // Find the cube's key in the Map
+        let cubeKey = null;
+        this.cubes.forEach((mapCube, key) => {
+            if (mapCube === cube) {
+                cubeKey = key;
+            }
+        });
+        
+        if (cubeKey) {
+            // Remove from scene
+            this.scene.remove(cube);
+            
+            // Remove from cubes Map using the correct key
+            this.cubes.delete(cubeKey);
+            
+            // Update cube count (ensure it doesn't go negative)
+            this.cubeCount = Math.max(0, this.cubeCount - 1);
+            document.getElementById('cube-count').textContent = `Cubes placed: ${this.cubeCount}`;
+            
+            // Dispose of geometry and material to free memory
+            if (cube.geometry) cube.geometry.dispose();
+            if (cube.material) cube.material.dispose();
+            
+            // Update preview cube position after removing
+            this.updatePreviewCube();
         }
     }
 }
