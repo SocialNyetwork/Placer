@@ -1,45 +1,26 @@
-# Place3D
+# Place3D - Like Place, but 3D...
 
-Basically a 3D version of place made in JS. Still a lot of work to do but it's a decent proof of concept right now.
+A online multiplayer 3D cube placement game(?) built with Three.js and Socket.IO.
 
+## Features
+
+- **Multiplayer**: Build together with other players in real-time
+- **3D Environment**: First-person grid-based 3D canvas
+- **Player Visualization**: See other players as colored cubes flying around
+- **Synchronized State**: All cube placements and removals sync across all clients
+- **STL Export**: Export your 3D creations as STL files for 3D printing
+
+## How to Play
 
 ### Controls
-- **Mouse Click**: Place or replace cubes
-- **Mouse Drag**: Rotate the camera view
-- **Mouse Scroll**: Cycle through colors
+- **Click**: Enter first-person mode
+- **WASD/Arrow Keys**: Move around
+- **Mouse**: Look around
+- **Left Click**: Place cubes
+- **Hold Right Click**: Enter destruction mode
+    -> **Left Click in Destruction Mode**: Remove highlighted cubes
+- **Scroll Wheel**: Cycle through colors
+- **ESC**: Exit first-person mode
+- **Ctrl+S**: Export canvas as STL file
 
-### Tips
-- Save your work regularly using the Save Image button, this will probably crash lol
-
-## Technical Details
-
-### Built With
-- **Three.js**: 3D graphics library for WebGL rendering
-- **Vanilla JavaScript**: No framework dependencies
-- **CSS3**: Modern styling with gradients and animations
-- **HTML5**: No notes... You kinda haff too sooooo
-
-### Browser Compatibility
-- Should work with everything, unless you are on mobile, screw you guys and your touch controls :|
-
-### Performance
-- Runs at 60fps on pretty much anything
-- Hardware-accelerated 3D rendering
-
-## TODO
-
-Potential features for future versions:
-- **Multiplayer Support**: Real-time collaboration with other users
-- **RGB Colors**: Color picker for unlimited color options
-- **Export Options**: 3D model export (OBJ, STL)
-- **Mobile**: Touch controls for mobile devices
-
-## Contributing
-
-Feel free to fork this project and add your own features!
-
-## License
-
-This project is open source and available under the MIT License.
-
-**Make cool stuff!** 🎨
+(Build some cool stuff)

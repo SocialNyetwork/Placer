@@ -6,14 +6,13 @@ class Place3D {
         this.controls = null;
         this.raycaster = null;
         this.mouse = null;
-        this.selectedColor = '#ff0000';
         this.cubeCount = 0;
-        this.cubes = new Map(); // Store placed cubes
-        this.gridSize = 50; // Size of the 3D grid
+        this.cubes = new Map();
+        this.gridSize = 50;
         this.cubeSize = 1;
-        this.maxHeight = 20; // Maximum height for stacking
-        this.previewCube = null; // Preview cube outline
-        this.isFirstPerson = true; // First person mode
+        this.maxHeight = 20;
+        this.previewCube = null;
+        this.isFirstPerson = true;
         this.isPointerLocked = false;
         this.isDestructionMode = false;
         this.highlightedCube = null;
@@ -21,37 +20,95 @@ class Place3D {
         this.lastMouseX = 0;
         this.lastMouseY = 0;
         
-        // Color cycling
+        this.socket = null;
+        this.playerId = null;
+        this.playerColor = null;
+        this.otherPlayers = new Map();
+        
         this.colors = [
-            '#f2ffe8', // Light mint green
-            '#c2bfc8', // Light grey
-            '#a8d3e1', // Light blue
-            '#acce71', // Lime green
-            '#eeca6f', // Golden yellow
-            '#ef9e6d', // Peach orange
-            '#dea999', // Light terracotta
-            '#ee9489', // Coral pink
-            '#dea9d2', // Light lavender
-            '#83758b', // Muted purple
-            '#6f8be6', // Periwinkle blue
-            '#498f94', // Teal
-            '#8c6a61', // Brown
-            '#986075', // Mauve
-            '#7767a6', // Purple
-            '#322f3d'  // Dark grey
+            '#f2ffe8', '#c2bfc8', '#a8d3e1', '#acce71', '#eeca6f', '#ef9e6d',
+            '#dea999', '#ee9489', '#dea9d2', '#83758b', '#6f8be6', '#498f94',
+            '#8c6a61', '#986075', '#7767a6', '#322f3d'
         ];
         this.currentColorIndex = 0;
-        this.selectedColor = this.colors[0]; // Light Mint Green
+        this.selectedColor = this.colors[0];
         
         this.init();
-        this.setupEventListeners();
         this.animate();
-        
-        // Initialize UI state
-        this.updateUIForPointerLock();
     }
     
     init() {
+        this.setupScene();
+        this.setupLights();
+        this.setupPreviewCube();
+        this.setupGrid();
+        this.setupGround();
+        this.setupEventListeners();
+        this.updateUIForPointerLock();
+        this.initMultiplayer();
+    }
+    
+    initMultiplayer() {
+        // Connect to multiplayer server
+        this.socket = io();
+        
+        // Handle initial game state
+        this.socket.on('gameState', (data) => {
+            this.playerId = data.playerId;
+            this.playerColor = data.playerColor;
+            
+            // Load existing cubes
+            data.cubes.forEach(([key, cubeData]) => {
+                this.loadCubeFromServer(cubeData);
+            });
+            
+            // Load other players
+            data.players.forEach(player => {
+                if (player.id !== this.playerId) {
+                    this.addOtherPlayer(player);
+                }
+            });
+            
+            this.updatePlayerCount();
+            console.log(`Connected to multiplayer as Player ${this.playerId}`);
+        });
+        
+        // Handle new cube placement from other players
+        this.socket.on('cubePlaced', (data) => {
+            if (data.playerId !== this.playerId) {
+                this.loadCubeFromServer(data);
+            }
+        });
+        
+        // Handle cube removal from other players
+        this.socket.on('cubeRemoved', (data) => {
+            this.removeCubeFromServer(data.key);
+        });
+        
+        // Handle new player joining
+        this.socket.on('playerJoined', (player) => {
+            this.addOtherPlayer(player);
+            console.log(`${player.name} joined the game`);
+        });
+        
+        // Handle player movement
+        this.socket.on('playerMoved', (data) => {
+            this.updateOtherPlayerPosition(data.playerId, data.position);
+        });
+        
+        // Handle player leaving
+        this.socket.on('playerLeft', (data) => {
+            this.removeOtherPlayer(data.playerId);
+            console.log(`Player ${data.playerId} left the game`);
+        });
+        
+        // Handle canvas clear
+        this.socket.on('canvasCleared', () => {
+            this.clearCanvas(true);
+        });
+    }
+    
+    setupScene() {
         // Scene setup
         this.scene = new THREE.Scene();
         this.scene.background = new THREE.Color(0x000000);
@@ -78,9 +135,7 @@ class Place3D {
         // Controls setup - First person controls
         this.controls = new THREE.PointerLockControls(this.camera, this.renderer.domElement);
         
-        // Mouse movement for first person
-        this.mouseX = 0;
-        this.mouseY = 0;
+        // Movement controls
         this.moveForward = false;
         this.moveBackward = false;
         this.moveLeft = false;
@@ -94,11 +149,6 @@ class Place3D {
         // Raycaster for mouse interaction
         this.raycaster = new THREE.Raycaster();
         this.mouse = new THREE.Vector2();
-        
-        this.setupLights();
-        this.setupGrid();
-        this.setupGround();
-        this.setupPreviewCube();
     }
     
     setupLights() {
@@ -211,6 +261,7 @@ class Place3D {
                 event.preventDefault();
                 this.isDestructionMode = true;
                 this.previewCube.visible = false;
+                this.highlightOutline.visible = false;
             }
         });
         
@@ -283,8 +334,8 @@ class Place3D {
             this.clearCanvas();
         });
         
-        document.getElementById('save-btn').addEventListener('click', () => {
-            this.saveImage();
+        document.getElementById('save-model-btn').addEventListener('click', () => {
+            this.saveModel();
         });
         
         document.getElementById('reset-camera-btn').addEventListener('click', () => {
@@ -324,13 +375,16 @@ class Place3D {
                     this.highlightedCube = closestCube;
                     this.highlightOutline.position.copy(closestCube.position);
                     this.highlightOutline.visible = true;
+                    this.previewCube.visible = false; // Hide placement preview
                 }
             } else {
                 this.highlightedCube = null;
                 this.highlightOutline.visible = false;
+                this.previewCube.visible = false; // Hide placement preview in destruction mode
             }
         } else {
             // Normal placement mode
+            this.highlightOutline.visible = false; // Hide destruction outline
             const cubeIntersects = this.raycaster.intersectObjects(Array.from(this.cubes.values()));
             
             if (cubeIntersects.length > 0) {
@@ -360,7 +414,7 @@ class Place3D {
                 this.raycaster.ray.intersectPlane(groundPlane, intersectionPoint);
                 
                 if (intersectionPoint) {
-                    // Snap to grid - place in center of grid squares
+                    // Snap to grid
                     const x = Math.floor(intersectionPoint.x / this.cubeSize) * this.cubeSize + this.cubeSize / 2;
                     const z = Math.floor(intersectionPoint.z / this.cubeSize) * this.cubeSize + this.cubeSize / 2;
                     
@@ -385,12 +439,19 @@ class Place3D {
                 }
             }
         }
-        // Animate highlight outline pulsing
+        // Pulse highlight outline
         if (this.highlightOutline && this.highlightOutline.visible) {
             const time = Date.now() * 0.003;
             const pulse = 0.5 + 0.3 * Math.sin(time * 4);
             this.highlightOutline.material.opacity = 0.3 + 0.4 * pulse;
             this.highlightOutline.scale.setScalar(1 + 0.05 * pulse);
+        }
+        
+        // Send player position to server (throttled to avoid spam)
+        if (this.socket && this.controls.isLocked && time % 100 < 16) { // ~60fps
+            this.socket.emit('playerMove', {
+                position: this.camera.position.clone()
+            });
         }
     }
     
@@ -507,7 +568,7 @@ class Place3D {
         return !this.cubes.has(key);
     }
     
-    placeCube(x, y, z) {
+    placeCube(x, y, z, fromServer = false) {
         const geometry = new THREE.BoxGeometry(this.cubeSize, this.cubeSize, this.cubeSize);
         const material = new THREE.MeshLambertMaterial({ color: this.selectedColor });
         const cube = new THREE.Mesh(geometry, material);
@@ -531,11 +592,16 @@ class Place3D {
         
         // Update preview cube position after placing
         this.updatePreviewCube();
-    }
-    
-    removeCube(x, y, z) {
-        const key = `${x},${y},${z}`;
-        this.removeCubeByKey(key);
+
+        // Send cube placement to server (only if not from server)
+        if (!fromServer && this.socket) {
+            this.socket.emit('placeCube', {
+                x: x,
+                y: y,
+                z: z,
+                color: this.selectedColor
+            });
+        }
     }
     
     removeCubeByKey(key) {
@@ -546,8 +612,6 @@ class Place3D {
             this.cubes.delete(key);
             this.cubeCount = Math.max(0, this.cubeCount - 1);
             this.updateStats();
-            
-            // Update preview cube position after removing
             this.updatePreviewCube();
         }
     }
@@ -627,7 +691,6 @@ class Place3D {
     }
     
     onKeyDown(event) {
-        // Check for Ctrl key combinations first (these work regardless of pointer lock state)
         if (event.ctrlKey) {
             switch (event.code) {
                 case 'KeyC':
@@ -636,7 +699,7 @@ class Place3D {
                     return;
                 case 'KeyS':
                     event.preventDefault();
-                    this.saveImage();
+                    this.saveModel();
                     return;
                 case 'KeyR':
                     event.preventDefault();
@@ -645,12 +708,8 @@ class Place3D {
             }
         }
         
-        // Only process movement controls if pointer is locked (in first-person mode)
-        if (!this.controls.isLocked) { // Changed from this.isPointerLocked to this.controls.isLocked
-            return;
-        }
+        if (!this.controls.isLocked) return;
         
-        // Regular movement controls
         switch (event.code) {
             case 'ArrowUp':
             case 'KeyW':
@@ -679,10 +738,7 @@ class Place3D {
     }
     
     onKeyUp(event) {
-        // Only process movement controls if pointer is locked (in first-person mode)
-        if (!this.controls.isLocked) { // Changed from this.isPointerLocked to this.controls.isLocked
-            return;
-        }
+        if (!this.controls.isLocked) return;
         
         switch (event.code) {
             case 'ArrowUp':
@@ -711,7 +767,7 @@ class Place3D {
         }
     }
     
-    clearCanvas() {
+    clearCanvas(fromServer = false) {
         // Remove all cubes from the scene and map
         this.cubes.forEach((cube) => {
             this.scene.remove(cube);
@@ -720,16 +776,48 @@ class Place3D {
         this.cubeCount = 0;
         this.updateStats();
         this.updatePreviewCube(); // Update preview after clearing
+
+        // Send canvas clear to server (only if not from server)
+        if (!fromServer && this.socket) {
+            this.socket.emit('clearCanvas');
+        }
     }
     
-    saveImage() {
-        this.renderer.render(this.scene, this.camera);
-        const dataURL = this.renderer.domElement.toDataURL('image/png');
+
+
+    saveModel() {
+        // Create a temporary scene with only the cubes (no grid, ground, or UI elements)
+        const exportScene = new THREE.Scene();
+        
+        // Add all cubes to the export scene
+        this.cubes.forEach((cube) => {
+            const cubeClone = cube.clone();
+            exportScene.add(cubeClone);
+        });
+        
+        // Create STL exporter
+        const exporter = new THREE.STLExporter();
+        
+        // Export the scene to STL format
+        const stlString = exporter.parse(exportScene, { binary: false });
+        
+        // Create download link
+        const blob = new Blob([stlString], { type: 'application/octet-stream' });
+        const url = URL.createObjectURL(blob);
         
         const link = document.createElement('a');
-        link.download = '3d-place-canvas.png';
-        link.href = dataURL;
+        link.href = url;
+        link.download = 'place3d-model.stl';
+        link.style.display = 'none';
+        
+        document.body.appendChild(link);
         link.click();
+        
+        // Clean up
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        
+        console.log(`Exported ${this.cubeCount} cubes as STL file`);
     }
     
     resetCamera() {
@@ -746,15 +834,12 @@ class Place3D {
         const canvas = document.getElementById('canvas');
         const modeIndicator = document.getElementById('mode-indicator');
         
-        if (this.controls.isLocked) { // Changed from this.isPointerLocked to this.controls.isLocked
-            // In first-person mode
+        if (this.controls.isLocked) {
             crosshair.style.display = 'block';
             canvas.style.cursor = 'none';
             modeIndicator.textContent = 'First-person mode (ESC to exit)';
-            // Add a subtle visual indicator that we're in first-person mode
             document.body.classList.add('first-person-mode');
         } else {
-            // In escape menu / UI mode
             crosshair.style.display = 'none';
             canvas.style.cursor = 'pointer';
             modeIndicator.textContent = 'Click to enter first-person mode';
@@ -779,6 +864,11 @@ class Place3D {
         document.getElementById('cube-count').textContent = `Cubes placed: ${this.cubeCount}`;
     }
     
+    updatePlayerCount() {
+        const playerCount = this.otherPlayers.size + 1;
+        document.getElementById('player-count').textContent = `Players: ${playerCount}`;
+    }
+    
     onWindowResize() {
         this.camera.aspect = window.innerWidth / window.innerHeight;
         this.camera.updateProjectionMatrix();
@@ -788,8 +878,7 @@ class Place3D {
     animate() {
         requestAnimationFrame(() => this.animate());
         
-        if (this.controls.isLocked) { // Changed from this.isPointerLocked to this.controls.isLocked
-            // First person movement - only when pointer is locked
+        if (this.controls.isLocked) {
             const time = performance.now();
             const delta = (time - this.previousTime) / 1000;
             
@@ -814,8 +903,6 @@ class Place3D {
             
             this.controls.moveRight(-this.velocity.x * delta);
             this.controls.moveForward(-this.velocity.z * delta);
-            
-            // Handle vertical movement manually since PointerLockControls doesn't support it
             this.camera.position.y += this.velocity.y * delta;
             
             this.previousTime = time;
@@ -827,7 +914,6 @@ class Place3D {
     findHighestCubeAt(x, z) {
         let highestY = 0;
         
-        // Check all cubes at this x,z position
         this.cubes.forEach((cube, key) => {
             const [cubeX, cubeY, cubeZ] = key.split(',').map(Number);
             if (cubeX === x && cubeZ === z) {
@@ -898,7 +984,7 @@ class Place3D {
         }
     }
 
-    destroyCube(cube) {
+    destroyCube(cube, fromServer = false) {
         // Find the cube's key in the Map
         let cubeKey = null;
         this.cubes.forEach((mapCube, key) => {
@@ -924,8 +1010,69 @@ class Place3D {
             
             // Update preview cube position after removing
             this.updatePreviewCube();
+            
+            // Send cube removal to server (only if not from server)
+            if (!fromServer && this.socket) {
+                this.socket.emit('removeCube', { key: cubeKey });
+            }
         }
     }
+
+    loadCubeFromServer(data) {
+        const geometry = new THREE.BoxGeometry(this.cubeSize, this.cubeSize, this.cubeSize);
+        const material = new THREE.MeshLambertMaterial({ color: data.color });
+        const cube = new THREE.Mesh(geometry, material);
+        
+        cube.position.set(data.x, data.y, data.z);
+        cube.castShadow = true;
+        cube.receiveShadow = true;
+        
+        this.scene.add(cube);
+        
+        const key = `${data.x},${data.y},${data.z}`;
+        this.cubes.set(key, cube);
+        
+        this.cubeCount++;
+        this.updateStats();
+    }
+
+    removeCubeFromServer(key) {
+        const cube = this.cubes.get(key);
+        if (cube) {
+            this.destroyCube(cube, true); // Pass true to indicate it's from server
+        }
+    }
+
+    updateOtherPlayerPosition(playerId, position) {
+        const player = this.otherPlayers.get(playerId);
+        if (player) {
+            player.mesh.position.copy(position);
+        }
+    }
+
+    addOtherPlayer(player) {
+        const playerMesh = new THREE.Mesh(
+            new THREE.BoxGeometry(0.5, 0.5, 0.5), // Simple cube for other players
+            new THREE.MeshLambertMaterial({ color: player.color })
+        );
+        playerMesh.position.copy(player.position);
+        playerMesh.castShadow = true;
+        playerMesh.receiveShadow = true;
+        this.scene.add(playerMesh);
+        this.otherPlayers.set(player.id, { mesh: playerMesh, position: player.position });
+        this.updatePlayerCount();
+    }
+    
+    removeOtherPlayer(playerId) {
+        const player = this.otherPlayers.get(playerId);
+        if (player) {
+            this.scene.remove(player.mesh);
+            this.otherPlayers.delete(playerId);
+            this.updatePlayerCount();
+        }
+    }
+
+
 }
 
 // Initialize the application when the page loads

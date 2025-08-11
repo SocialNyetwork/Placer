@@ -7,6 +7,8 @@
     <link rel="stylesheet" href="styles.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/PointerLockControls.js"></script>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/exporters/STLExporter.js"></script>
 </head>
 <body>
     <div id="app">
@@ -41,25 +43,8 @@
             <div class="tools">
                 <h3>Tools</h3>
                 <button id="clear-btn" class="btn">Clear Canvas</button>
-                <button id="save-btn" class="btn">Save Image</button>
+                <button id="save-model-btn" class="btn">Save Model (STL)</button>
                 <button id="reset-camera-btn" class="btn">Reset Camera</button>
-            </div>
-            
-            <div class="info">
-                <h3>Instructions</h3>
-                <ul>
-                    <li>Click to enter first-person mode</li>
-                    <li>WASD or Arrow keys to move</li>
-                    <li>Shift to move up, Space to move down</li>
-                    <li>Mouse to look around</li>
-                    <li>Left click to place cubes</li>
-                    <li>Hold right click for destruction mode</li>
-                    <li>Left click in destruction mode to remove cubes</li>
-                    <li>Scroll wheel to cycle through 16 colors</li>
-                    <li>Cubes stack on top of each other</li>
-                    <li>ESC to exit first-person mode</li>
-                    <li>Select a color from the palette</li>
-                </ul>
             </div>
         </div>
         
@@ -70,8 +55,9 @@
         
         <div class="stats">
             <span id="cube-count">Cubes placed: 0</span>
-            <span id="current-color">Selected: Red</span>
+            <span id="current-color">Selected: Light Mint Green</span>
             <span id="mode-indicator" class="mode-indicator">Click to enter first-person mode</span>
+            <span id="player-count" class="player-count">Players: 1</span>
         </div>
     </div>
     

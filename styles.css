@@ -319,6 +319,17 @@ body {
     transition: all 0.3s ease;
 }
 
+.player-count {
+    font-size: 0.9rem;
+    color: #28a745 !important;
+    font-weight: 500;
+    padding: 0.3rem 0.6rem;
+    background: rgba(40, 167, 69, 0.1);
+    border-radius: 6px;
+    border-left: 3px solid #28a745;
+    transition: all 0.3s ease;
+}
+
 .first-person-mode .mode-indicator {
     color: #28a745 !important;
     background: rgba(40, 167, 69, 0.1);
